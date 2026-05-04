@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Body Link Atlas 暗号化ツール</title>
+  <style>
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Yu Gothic",Meiryo,sans-serif;line-height:1.7;margin:0;background:#f7f8fb;color:#172033}
+    main{max-width:980px;margin:0 auto;padding:28px}
+    section{background:#fff;border:1px solid #e3e7ef;border-radius:22px;padding:24px;margin:16px 0;box-shadow:0 16px 40px rgba(22,31,52,.08)}
+    textarea,input{width:100%;box-sizing:border-box;border:1px solid #dfe5ef;border-radius:12px;padding:12px;font:inherit}
+    textarea{min-height:180px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+    button{border:0;background:#2e6079;color:#fff;border-radius:999px;padding:11px 18px;font-weight:800;cursor:pointer}
+    button.secondary{background:#fff;color:#172033;border:1px solid #dfe5ef}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:800px){.grid{grid-template-columns:1fr}}
+    .warning{border-left:5px solid #b4234d;background:#fff7f9;padding:12px 14px;border-radius:12px}.muted{color:#657084}.ok{color:#176b4d;font-weight:800}.err{color:#b4234d;font-weight:800}
+  </style>
+</head>
+<body>
+<main>
+  <section>
+    <p class="muted">公開リポジトリ向け</p>
+    <h1>Body Link Atlas 暗号化ツール</h1>
+    <p>ローカルで編集した平文JSONを、GitHub Pages用の <code>data/encrypted-data.json</code> に変換します。このツールは外部通信しません。</p>
+    <div class="warning">生成前の keywords.json / relations.json は公開リポジトリにアップロードしないでください。</div>
+  </section>
+  <section>
+    <h2>1. パスワード</h2>
+    <p class="muted">20文字以上を推奨します。サイト閲覧時にも同じパスワードを使います。</p>
+    <input id="password" type="password" placeholder="新しいパスワード" minlength="12" />
+  </section>
+  <section>
+    <h2>2. JSONを貼り付け</h2>
+    <div class="grid">
+      <div><h3>keywords.json</h3><textarea id="keywords" placeholder='[ { "id":"cell", "name":"細胞" } ]'></textarea></div>
+      <div><h3>relations.json</h3><textarea id="relations" placeholder='[ { "source":"細胞", "target":"細胞障害", "relationType":"関係する" } ]'></textarea></div>
+    </div>
+    <p><button class="secondary" onclick="loadFiles()">JSONファイルを選んで読み込む</button></p>
+    <input id="fileInput" type="file" accept="application/json,.json" multiple hidden />
+  </section>
+  <section>
+    <h2>3. 暗号化してダウンロード</h2>
+    <p><button onclick="encryptAndDownload()">encrypted-data.json を作成</button></p>
+    <p id="message" class="muted"></p>
+  </section>
+</main>
+<script>
+const iterations = 310000;
+function setMessage(text, cls="muted"){ const el=document.getElementById("message"); el.className=cls; el.textContent=text; }
+function bytesToBase64(bytes){ let s=""; bytes.forEach(b=>s+=String.fromCharCode(b)); return btoa(s); }
+async function deriveAesKey(password, salt){
+  const baseKey = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), {name:"PBKDF2"}, false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations,hash:"SHA-256"}, baseKey, {name:"AES-GCM",length:256}, false, ["encrypt"]);
+}
+function download(filename, text){
+  const blob = new Blob([text], {type:"application/json;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+async function encryptAndDownload(){
+  try{
+    const password = document.getElementById("password").value;
+    if(password.length < 12) throw new Error("パスワードは12文字以上にしてください。20文字以上推奨です。");
+    const keywords = JSON.parse(document.getElementById("keywords").value);
+    const relations = JSON.parse(document.getElementById("relations").value);
+    if(!Array.isArray(keywords) || !Array.isArray(relations)) throw new Error("keywords / relations は配列形式にしてください。");
+    setMessage("暗号化中です…", "muted");
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveAesKey(password, salt);
+    const payload = new TextEncoder().encode(JSON.stringify({keywords, relations}));
+    const ciphertext = new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, payload));
+    const encrypted = {version:1, algorithm:"AES-GCM", kdf:"PBKDF2-SHA256", iterations, salt:bytesToBase64(salt), iv:bytesToBase64(iv), ciphertext:bytesToBase64(ciphertext), note:"Encrypted Body Link Atlas data. Do not commit plaintext keywords.json or relations.json to a public repository."};
+    download("encrypted-data.json", JSON.stringify(encrypted, null, 2));
+    setMessage("作成しました。data/encrypted-data.json と差し替えてください。", "ok");
+  }catch(err){ setMessage(err.message, "err"); }
+}
+function loadFiles(){ document.getElementById("fileInput").click(); }
+document.getElementById("fileInput").addEventListener("change", async (e)=>{
+  for(const file of e.target.files){
+    const text = await file.text();
+    const lower = file.name.toLowerCase();
+    if(lower.includes("keyword")) document.getElementById("keywords").value = text;
+    else if(lower.includes("relation")) document.getElementById("relations").value = text;
+  }
+});
+</script>
+</body>
+</html>

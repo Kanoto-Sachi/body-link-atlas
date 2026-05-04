@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Body Link Atlas — からだのつながりマップ</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body class="locked">
+  <section id="auth-screen" class="auth-screen" aria-label="パスワード入力画面">
+    <div class="auth-card">
+      <p class="eyebrow">暗号化データロック</p>
+      <h1 class="auth-title">Body Link Atlas</h1>
+      <p class="muted">パスワードで学習データを復号して表示します。</p>
+      <form id="auth-form" class="auth-form">
+        <label for="password-input">パスワード</label>
+        <input id="password-input" type="password" autocomplete="current-password" placeholder="パスワードを入力" required minlength="12" />
+        <button class="btn primary" type="submit">開く</button>
+        <p id="auth-message" class="auth-message" role="status"></p>
+      </form>
+      <p class="auth-note">※ 公開リポジトリ向けに、キーワードデータは暗号化ファイルだけを置く構成です。平文JSONは公開しないでください。</p>
+    </div>
+  </section>
+
+  <div id="protected-app" hidden>
+  <header class="site-header">
+    <p class="eyebrow">看護・医療学習のための人体キーワード管理</p>
+    <h1>Body Link Atlas <span>— からだのつながりマップ</span></h1>
+    <p class="lead">暗号化JSONを正本として、キーワードカード・人体索引・関連マップ・復習ビューを表示する静的Webアプリです。</p>
+    <nav id="nav" class="tabs" aria-label="画面切り替え"></nav>
+  </header>
+
+  <main id="app" class="app-shell">
+    <section class="panel">
+      <h2>読み込み中</h2>
+      <p>data/encrypted-data.json を読み込み、パスワードで復号します。</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>医学的内容は学習用下書きです。AI生成内容には「要確認」タグを付け、教科書・授業資料で確認してください。</p>
+  </footer>
+
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
