@@ -212,3 +212,18 @@ svg#relationSvg{height:760px;min-height:760px}
 .btn.ghost{
   background: #fff;
 }
+
+
+/* v6: 看護学レイヤー */
+.btn.primary-soft{background:#eef7f2;border-color:#b9dccb;color:#174d38}
+.nursing-stat{background:#f2fbf6;border-color:#b9dccb}
+.nursing-layer-panel{background:linear-gradient(180deg,#ffffff,#fbfffc)}
+.compact-stats .stat strong{font-size:24px}
+.nursing-controls{grid-template-columns:1.4fr 1fr 1fr auto}
+@media(max-width:900px){.nursing-controls{grid-template-columns:1fr}}
+.nursing-hint{margin:12px 0 18px;background:#f8fff8;border-left-color:#4b946b}
+.nursing-quick{margin:16px 0 20px}
+.nursing-category-card{width:100%;text-align:left;background:#f7fcf9}
+.nursing-group-card{background:#fff}
+.nursing-person-card{background:#fffdf8}
+.nursing-chip{background:#f2fbf6;border-color:#b9dccb;color:#174d38}

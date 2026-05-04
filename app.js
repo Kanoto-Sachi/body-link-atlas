@@ -114,6 +114,7 @@ const views = [
   ["list","キーワード一覧"],
   ["index","人体索引"],
   ["body","人体シルエット"],
+  ["nursingLayer","看護学レイヤー"],
   ["substances","物質リンクビュー"],
   ["cross","分野横断ビュー"],
   ["map","関連マップ"],
@@ -208,10 +209,20 @@ function getAllTermTypes(){
 function getAllSubstanceGroups(){
   return uniq(state.keywords.map(k => k.substanceGroup).filter(Boolean));
 }
+function isNursingStudyLayer(k){
+  const systems = asArray(k?.systems || k?.system);
+  const cat = k?.category || "";
+  return k?.layer === "看護学レイヤー" || systems.includes("看護学レイヤー") ||
+    ["看護学概論","看護史・人物","看護理論家","看護理論","看護過程","看護倫理","発達理論","健康概念","家族・社会","公衆衛生・看護教育"].includes(cat);
+}
+function getNursingLayerItems(){
+  return state.keywords.filter(isNursingStudyLayer);
+}
 function inferTermType(k){
   const name = k?.name || "";
   const cat = k?.category || "";
   if(k?.termType) return k.termType;
+  if(isNursingStudyLayer(k)) return k.termType || "看護学";
   if(k?.substanceGroup || cat.includes("物質")) return "物質";
   if(cat.includes("検査") || ["CRP","AST","ALT","BUN","Na","K","Cl","SpO2"].includes(name)) return "検査値";
   if(cat.includes("細胞") || name.endsWith("細胞") || ["好中球","マクロファージ","リンパ球"].includes(name)) return "細胞";
@@ -259,6 +270,7 @@ function render(){
     list: renderList,
     index: renderIndex,
     body: renderBodyAtlas,
+    nursingLayer: renderNursingLayer,
     substances: renderSubstances,
     cross: renderCrossLinks,
     map: renderMap,
@@ -273,6 +285,7 @@ function render(){
 
 function renderTop(){
   const systems = ["基礎レイヤー","呼吸器","循環器","消化器","腎泌尿器","神経","運動器","内分泌","感染免疫","腫瘍","看護観察","検査","修復"];
+  const nursingLayerCount = getNursingLayerItems().length;
   const unknown = state.keywords.filter(k => Number(k.understanding) <= 2).length;
   const nursing = state.keywords.filter(k => (k.nursingObservation || "").trim()).length;
   const check = state.keywords.filter(k => k.checkTag).length;
@@ -288,10 +301,12 @@ function renderTop(){
           <div class="stat"><strong>${unknown}</strong><span>未理解</span></div>
           <div class="stat"><strong>${nursing}</strong><span>看護につながる</span></div>
           <div class="stat"><strong>${check}</strong><span>要確認</span></div>
+          <div class="stat nursing-stat"><strong>${nursingLayerCount}</strong><span>看護学レイヤー</span></div>
         </div>
         <p style="margin-top:18px">
           <button class="btn primary" onclick="setView('list')">キーワード一覧へ</button>
           <button class="btn" onclick="setView('body')">人体シルエットへ</button>
+          <button class="btn primary-soft" onclick="setView('nursingLayer')">看護学レイヤーへ</button>
           <button class="btn" onclick="setView('substances')">物質リンクへ</button>
           <button class="btn" onclick="setView('cross')">分野横断へ</button>
           <button class="btn" onclick="setView('template')">JSONテンプレートへ</button>
@@ -349,7 +364,7 @@ function renderFilters(prefix="list"){
 function filteredKeywords(source=state.keywords){
   const q = (state.filters.q || "").toLowerCase();
   return source.filter(k => {
-    const text = [k.name,k.reading,k.category,asArray(k.systems).join(","),k.shortDescription,k.detailDescription,k.relatedSubstances,k.relatedDiseases,k.relatedTests,k.nursingObservation,k.substanceGroup,k.plainName,k.bridge].join(" ").toLowerCase();
+    const text = [k.name,k.reading,k.category,asArray(k.systems).join(","),k.shortDescription,k.detailDescription,k.relatedSubstances,k.relatedDiseases,k.relatedTests,k.nursingObservation,k.substanceGroup,k.plainName,k.bridge,k.layer,k.nursingArea,k.era].join(" ").toLowerCase();
     const okQ = !q || text.includes(q);
     const okCat = !state.filters.category || k.category === state.filters.category;
     const okSys = !state.filters.system || asArray(k.systems || k.system).includes(state.filters.system) || k.category === state.filters.system;
@@ -396,7 +411,7 @@ function renderList(){
 }
 
 function renderIndex(){
-  const rows = filteredKeywords();
+  const rows = filteredKeywords().filter(k => !isNursingStudyLayer(k));
   const groups = {};
   rows.forEach(k => {
     const keys = asArray(k.systems || k.system);
@@ -408,7 +423,7 @@ function renderIndex(){
   });
   return `<section class="panel">
     <h2>人体索引ビュー</h2>
-    <p class="muted">器官系ごとにキーワードをグループ表示します。</p>
+    <p class="muted">器官系ごとにキーワードをグループ表示します。看護学概論・看護理論は混ざらないよう、専用の「看護学レイヤー」に分けています。</p>
     ${renderFilters("index")}
     <div class="grid cols-2">
       ${Object.entries(groups).map(([name, items]) => `<div class="card">
@@ -711,7 +726,7 @@ function renderBodyAtlas(){
   ];
   const selected = state.filters.bodyRegion || "whole";
   const region = regions.find(r=>r.id===selected) || regions[0];
-  const items = state.keywords.filter(k => region.systems.some(s => asArray(k.systems || k.system).includes(s) || k.category === s));
+  const items = state.keywords.filter(k => !isNursingStudyLayer(k) && region.systems.some(s => asArray(k.systems || k.system).includes(s) || k.category === s));
   return `<section class="panel">
     <h2>人体シルエットから探すビュー</h2>
     <p class="muted">部位をクリックして、関係しやすい器官系・基礎概念・検査・看護観察へ入ります。3Dではなく、更新しやすいシンプルな人体入口です。</p>
@@ -739,6 +754,76 @@ function renderBodyAtlas(){
           ${items.slice(0,80).map(k=>`<tr><td><button class="keyword-link" onclick="setSelected('${escapeHtml(k.name)}')">${escapeHtml(k.name)}</button></td><td>${escapeHtml(inferTermType(k))}</td><td>${escapeHtml(k.shortDescription||"")}</td><td><button class="btn" onclick="setMapCenter('${escapeHtml(k.name)}')">マップ</button></td></tr>`).join("") || `<tr><td colspan="4">該当キーワードがありません。</td></tr>`}
         </tbody></table></div>
       </div>
+    </div>
+  </section>`;
+}
+
+
+
+function renderNursingLayer(){
+  const all = getNursingLayerItems();
+  const q = String(state.filters.nursingQ || "").trim().toLowerCase();
+  const category = state.filters.nursingCategory || "";
+  const type = state.filters.nursingType || "";
+  let list = all.filter(k => {
+    const text = [k.name,k.reading,k.category,k.shortDescription,k.detailDescription,k.memo,k.nursingArea,k.era,k.relatedKeywords?.join?.(" ")].join(" ").toLowerCase();
+    const okQ = !q || text.includes(q);
+    const okCat = !category || k.category === category;
+    const okType = !type || inferTermType(k) === type;
+    return okQ && okCat && okType;
+  });
+  const cats = uniq(all.map(k=>k.category));
+  const types = uniq(all.map(k=>inferTermType(k)));
+  const people = list.filter(k => inferTermType(k) === "人物" || inferTermType(k) === "看護理論家" || k.category === "看護史・人物");
+  const concepts = list.filter(k => !people.includes(k));
+  const grouped = {};
+  list.forEach(k => {
+    const g = k.category || "看護学レイヤー";
+    if(!grouped[g]) grouped[g] = [];
+    grouped[g].push(k);
+  });
+  return `<section class="panel nursing-layer-panel">
+    <p class="eyebrow">解剖生理とは別枠</p>
+    <h2>看護学レイヤー</h2>
+    <p class="muted">看護学概論・看護史・看護理論家・倫理・看護過程を、人体/病態レイヤーと混ざらない専用カテゴリで管理します。</p>
+    <div class="stats compact-stats">
+      <div class="stat"><strong>${all.length}</strong><span>看護学キーワード</span></div>
+      <div class="stat"><strong>${people.length}</strong><span>表示中の人物</span></div>
+      <div class="stat"><strong>${concepts.length}</strong><span>表示中の概念</span></div>
+    </div>
+    <div class="controls nursing-controls">
+      <input placeholder="看護学内検索：ナイチンゲール、オレム、倫理など" value="${escapeHtml(state.filters.nursingQ || "")}" oninput="state.filters.nursingQ=this.value;render()" />
+      <select onchange="state.filters.nursingCategory=this.value;render()">
+        <option value="">看護学カテゴリすべて</option>
+        ${cats.map(c=>`<option ${category===c?"selected":""}>${escapeHtml(c)}</option>`).join("")}
+      </select>
+      <select onchange="state.filters.nursingType=this.value;render()">
+        <option value="">種類すべて</option>
+        ${types.map(t=>`<option ${type===t?"selected":""}>${escapeHtml(t)}</option>`).join("")}
+      </select>
+      <button class="btn" onclick="state.filters.nursingQ='';state.filters.nursingCategory='';state.filters.nursingType='';render()">クリア</button>
+    </div>
+    <div class="nursing-hint warning"><strong>運用ルール：</strong>このレイヤーは看護学概論・理論・歴史用です。呼吸器や循環器などの解剖生理キーワードとは、関連づけで横につなげるだけにします。</div>
+    <div class="grid cols-3 nursing-quick">
+      ${cats.map(c => `<button class="category-card nursing-category-card" onclick="state.filters.nursingCategory='${escapeHtml(c)}';render()"><h3>${escapeHtml(c)}</h3><p class="muted">${all.filter(k=>k.category===c).length}件</p></button>`).join("")}
+    </div>
+    <h3 class="subheading">カテゴリ別一覧</h3>
+    <div class="grid cols-2">
+      ${Object.entries(grouped).map(([g, items]) => `<div class="card nursing-group-card">
+        <h3>${escapeHtml(g)} <span class="muted">${items.length}件</span></h3>
+        <div class="chips">
+          ${items.map(k => `<button class="chip keyword-link" onclick="setSelected('${escapeHtml(k.name)}')">${escapeHtml(k.name)} <span class="chip small">${escapeHtml(inferTermType(k))}</span></button>`).join("")}
+        </div>
+      </div>`).join("") || `<div class="empty">該当する看護学キーワードがありません。</div>`}
+    </div>
+    <h3 class="subheading">人物・理論家カード</h3>
+    <div class="grid cols-3">
+      ${people.slice(0,120).map(k => `<div class="row-card nursing-person-card" onclick="setSelected('${escapeHtml(k.name)}')">
+        <div class="detail-title compact-title"><h4>${escapeHtml(k.name)}</h4><span class="chip small nursing-chip">${escapeHtml(inferTermType(k))}</span></div>
+        <p>${escapeHtml(k.shortDescription || "")}</p>
+        <p class="muted"><strong>関連：</strong>${asArray(k.relatedKeywords).slice(0,6).join("・")}</p>
+        <button class="btn" onclick="event.stopPropagation();setMapCenter('${escapeHtml(k.name)}')">関連マップ</button>
+      </div>`).join("") || `<div class="empty">人物キーワードがありません。</div>`}
     </div>
   </section>`;
 }
