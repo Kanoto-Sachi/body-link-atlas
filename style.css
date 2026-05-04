@@ -132,3 +132,15 @@ body.locked .site-header,body.locked .app-shell,body.locked .site-footer{display
 
 .auth-form button:disabled{opacity:.6;cursor:wait}
 .security-note{font-size:13px;color:var(--muted)}
+
+
+/* v2: 物質リンク・分野横断ビュー */
+.filters-extended{grid-template-columns:repeat(3,minmax(0,1fr));}
+@media(max-width:900px){.filters-extended{grid-template-columns:1fr}}
+.chip.small{font-size:12px;padding:3px 8px;margin-top:4px}
+.chip.substance{background:#fff8e8;border-color:#f0d8a8;color:#73510b}
+.substance-card{background:linear-gradient(180deg,#fff,#fbfdff)}
+.row-card.compact{padding:12px}
+.compact-title{align-items:center;margin-bottom:4px}
+.compact-title h4{margin:0;font-size:18px}
+.empty{padding:18px;color:var(--muted);border:1px dashed var(--line);border-radius:16px;background:#fff}

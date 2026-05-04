@@ -113,6 +113,8 @@ const views = [
   ["template","JSON追加テンプレート"],
   ["list","キーワード一覧"],
   ["index","人体索引"],
+  ["substances","物質リンクビュー"],
+  ["cross","分野横断ビュー"],
   ["map","関連マップ"],
   ["card","学習カード"],
   ["quiz","小テスト"],
@@ -150,6 +152,27 @@ function getAllCategories(){
 function getRelationTypes(){
   return uniq(state.relations.map(r => r.relationType));
 }
+function getAllTermTypes(){
+  return uniq(state.keywords.map(k => k.termType || inferTermType(k)));
+}
+function getAllSubstanceGroups(){
+  return uniq(state.keywords.map(k => k.substanceGroup).filter(Boolean));
+}
+function inferTermType(k){
+  const name = k?.name || "";
+  const cat = k?.category || "";
+  if(k?.termType) return k.termType;
+  if(k?.substanceGroup || cat.includes("物質")) return "物質";
+  if(cat.includes("検査") || ["CRP","AST","ALT","BUN","Na","K","Cl","SpO2"].includes(name)) return "検査値";
+  if(cat.includes("細胞") || name.endsWith("細胞") || ["好中球","マクロファージ","リンパ球"].includes(name)) return "細胞";
+  if(cat.includes("疾患") || cat.includes("腫瘍") || name.includes("症") || name.includes("不全")) return "疾患・病態";
+  if(cat.includes("看護") || cat.includes("観察")) return "観察";
+  return "概念";
+}
+function isSubstanceLike(k){
+  const t = inferTermType(k);
+  return t === "物質" || t === "検査値" || Boolean(k.substanceGroup);
+}
 function labelUnderstanding(v){
   return ({1:"1：未理解",2:"2：あいまい",3:"3：説明できる",4:"4：問題で使える",5:"5：定着"}[v] || String(v || ""));
 }
@@ -185,6 +208,8 @@ function render(){
     template: renderTemplate,
     list: renderList,
     index: renderIndex,
+    substances: renderSubstances,
+    cross: renderCrossLinks,
     map: renderMap,
     card: renderCard,
     quiz: renderQuiz,
@@ -215,6 +240,8 @@ function renderTop(){
         </div>
         <p style="margin-top:18px">
           <button class="btn primary" onclick="setView('list')">キーワード一覧へ</button>
+          <button class="btn" onclick="setView('substances')">物質リンクへ</button>
+          <button class="btn" onclick="setView('cross')">分野横断へ</button>
           <button class="btn" onclick="setView('template')">JSONテンプレートへ</button>
         </p>
       </div>
@@ -233,15 +260,25 @@ function renderTop(){
 function renderFilters(prefix="list"){
   const cats = getAllCategories();
   const systems = getAllSystems();
-  return `<div class="controls">
+  const termTypes = getAllTermTypes();
+  const groups = getAllSubstanceGroups();
+  return `<div class="controls filters-extended">
     <input id="${prefix}-q" placeholder="キーワード検索" value="${escapeHtml(state.filters.q || "")}" oninput="state.filters.q=this.value;render()" />
     <select onchange="state.filters.category=this.value;render()">
       <option value="">カテゴリすべて</option>
-      ${cats.map(c => `<option ${state.filters.category===c?"selected":""}>${c}</option>`).join("")}
+      ${cats.map(c => `<option ${state.filters.category===c?"selected":""}>${escapeHtml(c)}</option>`).join("")}
     </select>
     <select onchange="state.filters.system=this.value;render()">
       <option value="">器官系すべて</option>
-      ${systems.map(s => `<option ${state.filters.system===s?"selected":""}>${s}</option>`).join("")}
+      ${systems.map(s => `<option ${state.filters.system===s?"selected":""}>${escapeHtml(s)}</option>`).join("")}
+    </select>
+    <select onchange="state.filters.termType=this.value;render()">
+      <option value="">種類すべて</option>
+      ${termTypes.map(t => `<option ${state.filters.termType===t?"selected":""}>${escapeHtml(t)}</option>`).join("")}
+    </select>
+    <select onchange="state.filters.substanceGroup=this.value;render()">
+      <option value="">物質ジャンルすべて</option>
+      ${groups.map(g => `<option ${state.filters.substanceGroup===g?"selected":""}>${escapeHtml(g)}</option>`).join("")}
     </select>
     <select onchange="state.filters.checkTag=this.value;render()">
       <option value="">要確認タグすべて</option>
@@ -253,12 +290,14 @@ function renderFilters(prefix="list"){
 function filteredKeywords(source=state.keywords){
   const q = (state.filters.q || "").toLowerCase();
   return source.filter(k => {
-    const text = [k.name,k.reading,k.category,asArray(k.systems).join(","),k.shortDescription,k.detailDescription].join(" ").toLowerCase();
+    const text = [k.name,k.reading,k.category,asArray(k.systems).join(","),k.shortDescription,k.detailDescription,k.relatedSubstances,k.relatedDiseases,k.relatedTests,k.nursingObservation,k.substanceGroup,k.plainName,k.bridge].join(" ").toLowerCase();
     const okQ = !q || text.includes(q);
     const okCat = !state.filters.category || k.category === state.filters.category;
     const okSys = !state.filters.system || asArray(k.systems || k.system).includes(state.filters.system) || k.category === state.filters.system;
+    const okType = !state.filters.termType || inferTermType(k) === state.filters.termType;
+    const okGroup = !state.filters.substanceGroup || k.substanceGroup === state.filters.substanceGroup;
     const okTag = !state.filters.checkTag || k.checkTag === state.filters.checkTag;
-    return okQ && okCat && okSys && okTag;
+    return okQ && okCat && okSys && okType && okGroup && okTag;
   });
 }
 
@@ -276,7 +315,7 @@ function renderList(){
       ${rows.map(k => `<tr>
         <td><button class="keyword-link" onclick="setSelected('${escapeHtml(k.name)}')">${escapeHtml(k.name)}</button></td>
         <td>${escapeHtml(k.reading)}</td>
-        <td>${escapeHtml(k.category)}</td>
+        <td>${escapeHtml(k.category)}<br><span class="chip small">${escapeHtml(inferTermType(k))}</span>${k.substanceGroup?`<span class="chip small substance">${escapeHtml(k.substanceGroup)}</span>`:""}</td>
         <td>${asArray(k.systems).map(s=>`<span class="chip">${escapeHtml(s)}</span>`).join(" ")}</td>
         <td>${labelUnderstanding(k.understanding)}</td>
         <td>${labelImportance(k.importance)}</td>
@@ -334,6 +373,8 @@ function renderCard(){
       </div>
     </div>
     <div class="grid cols-2" style="margin-top:20px">
+      ${info("種類・ジャンル", `${inferTermType(selected)}${selected.substanceGroup ? " / " + selected.substanceGroup : ""}${selected.plainName ? "\nやさしい言い換え：" + selected.plainName : ""}`)}
+      ${selected.bridge ? info("分野とのつながり", selected.bridge) : ""}
       ${info("一言説明", selected.shortDescription)}
       ${info("詳しい説明", selected.detailDescription)}
       ${info("原因", selected.cause)}
@@ -462,6 +503,68 @@ function drawMap(){
   svg.innerHTML = edgeLines + nodeEls;
 }
 
+
+function renderSubstances(){
+  const items = filteredKeywords(state.keywords).filter(isSubstanceLike);
+  const groups = {};
+  items.forEach(k => {
+    const g = k.substanceGroup || inferTermType(k) || "未分類";
+    if(!groups[g]) groups[g] = [];
+    groups[g].push(k);
+  });
+  return `<section class="panel">
+    <h2>物質リンクビュー</h2>
+    <p class="muted">カタカナ・略語・検査値をジャンル分けし、「何の分野とつながる物質か」を見ます。</p>
+    ${renderFilters("substances")}
+    <div class="grid cols-2">
+      ${Object.entries(groups).map(([group, list]) => `<div class="card substance-card">
+        <h3>${escapeHtml(group)} <span class="muted">${list.length}件</span></h3>
+        <div class="grid">
+          ${list.map(k => `<div class="row-card compact" onclick="setSelected('${escapeHtml(k.name)}')">
+            <div class="detail-title compact-title"><h4>${escapeHtml(k.name)}</h4><span class="chip small">${escapeHtml(inferTermType(k))}</span></div>
+            ${k.plainName ? `<p class="muted"><strong>言い換え：</strong>${escapeHtml(k.plainName)}</p>` : ""}
+            <p>${escapeHtml(k.shortDescription || "")}</p>
+            <p class="muted"><strong>つながる分野：</strong>${asArray(k.systems).join("・")}</p>
+            ${k.bridge ? `<p class="muted"><strong>橋渡し：</strong>${escapeHtml(k.bridge)}</p>` : ""}
+            <button class="btn" onclick="event.stopPropagation();setMapCenter('${escapeHtml(k.name)}')">マップで見る</button>
+          </div>`).join("")}
+        </div>
+      </div>`).join("") || `<div class="empty">該当する物質・検査値がありません。</div>`}
+    </div>
+  </section>`;
+}
+
+function renderCrossLinks(){
+  const systems = getAllSystems();
+  const selectedSystem = state.filters.crossSystem || systems[0] || "";
+  const inSystem = state.keywords.filter(k => !selectedSystem || asArray(k.systems || k.system).includes(selectedSystem) || k.category === selectedSystem);
+  const substances = inSystem.filter(isSubstanceLike);
+  const concepts = inSystem.filter(k => !isSubstanceLike(k));
+  const relatedEdges = state.relations.filter(r => {
+    const a = getKeyword(r.source), b = getKeyword(r.target);
+    return a && b && (asArray(a.systems).includes(selectedSystem) || asArray(b.systems).includes(selectedSystem));
+  }).slice(0, 80);
+  return `<section class="panel">
+    <h2>分野横断ビュー</h2>
+    <p class="muted">「器官系 → 物質・検査値 → 病態・看護観察」の横断関係を見ます。暗記の羅列を避けるためのビューです。</p>
+    <div class="controls two">
+      <select onchange="state.filters.crossSystem=this.value;render()">
+        ${systems.map(s => `<option ${selectedSystem===s?"selected":""}>${escapeHtml(s)}</option>`).join("")}
+      </select>
+      <button class="btn" onclick="state.filters.crossSystem='';render()">全分野に戻す</button>
+    </div>
+    <div class="grid cols-3">
+      <div class="card soft"><h3>${escapeHtml(selectedSystem || "全分野")}の物質・検査値</h3><div class="chips">${substances.map(k=>`<button class="chip keyword-link" onclick="setSelected('${escapeHtml(k.name)}')">${escapeHtml(k.name)}</button>`).join("") || "なし"}</div></div>
+      <div class="card soft"><h3>関連する概念・病態</h3><div class="chips">${concepts.slice(0,80).map(k=>`<button class="chip keyword-link" onclick="setSelected('${escapeHtml(k.name)}')">${escapeHtml(k.name)}</button>`).join("") || "なし"}</div></div>
+      <div class="card soft"><h3>看護で拾う入口</h3><p>${escapeHtml(inSystem.map(k=>k.nursingObservation).filter(Boolean).slice(0,8).join(" / ")) || "未登録"}</p></div>
+    </div>
+    <div class="table-wrap" style="margin-top:16px"><table>
+      <thead><tr><th>起点</th><th>関係</th><th>関連先</th><th>メモ</th></tr></thead>
+      <tbody>${relatedEdges.map(r=>`<tr><td><button class="keyword-link" onclick="setSelected('${escapeHtml(r.source)}')">${escapeHtml(r.source)}</button></td><td>${escapeHtml(r.relationType)}</td><td><button class="keyword-link" onclick="setSelected('${escapeHtml(r.target)}')">${escapeHtml(r.target)}</button></td><td>${escapeHtml(r.memo||"")}</td></tr>`).join("")}</tbody>
+    </table></div>
+  </section>`;
+}
+
 function renderUnknown(){
   const list = state.keywords.filter(k => Number(k.understanding) <= 2);
   return `<section class="panel">
@@ -532,7 +635,11 @@ function renderTemplate(){
     "importance": 4,
     "memo": "学習用の下書き。",
     "source": "AI生成サンプル／教科書・授業資料で確認",
-    "checkTag": "要確認"
+    "checkTag": "要確認",
+    "termType": "概念",
+    "substanceGroup": "必要時のみ：炎症メディエーターなど",
+    "plainName": "カタカナ・略語のやさしい言い換え",
+    "bridge": "このキーワードが他分野とどうつながるか"
   };
   const relationTemplate = {
     "source": "起点キーワード",

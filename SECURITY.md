@@ -1,22 +1,26 @@
-# Security Notes
+# Security Policy
 
-This is a static-site hardening setup for GitHub Pages.
+## 公開してよいファイル
 
-## Threat model
+- `index.html`
+- `app.js`
+- `style.css`
+- `README.md`
+- `SECURITY.md`
+- `.gitignore`
+- `data/encrypted-data.json`
+- `tools/encrypt.html`
 
-Protected against casual browsing of plaintext learning data in a public repository.
+## 公開しないファイル
 
-Not protected against:
+- `keywords.json`
+- `relations.json`
+- `body-link-atlas-private-data-bundle.json`
+- `private-data-expanded/`
+- パスワードを書いたメモ
+- 個人情報、患者情報、学校名、非公開資料
 
-- weak passwords
-- sharing the password publicly
-- putting plaintext JSON in the repository
-- browser/device compromise
-- determined offline brute force if the password is weak
+## 注意
 
-## Rules
-
-1. Do not commit plaintext `keywords.json` or `relations.json`.
-2. Use a long unique passphrase.
-3. Do not include patient information, school-identifiable private data, or personal secrets.
-4. Rotate the passphrase by re-encrypting `data/encrypted-data.json` when needed.
+このロックはGitHub Pages向けの静的サイト用です。本格的なサーバー認証ではありません。
+データは暗号化されていますが、パスワードが弱い場合や公開された場合は保護できません。
