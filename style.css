@@ -144,3 +144,50 @@ body.locked .site-header,body.locked .app-shell,body.locked .site-footer{display
 .compact-title{align-items:center;margin-bottom:4px}
 .compact-title h4{margin:0;font-size:18px}
 .empty{padding:18px;color:var(--muted);border:1px dashed var(--line);border-radius:16px;background:#fff}
+
+/* v3: 関連マップ強化・人体シルエット */
+.map-panel{padding-bottom:34px}
+.map-layout.enhanced{grid-template-columns:minmax(0,1fr) 360px;align-items:start}
+.map-stage{min-height:760px;overflow:visible;padding-bottom:8px}
+svg#relationSvg{height:760px;min-height:760px}
+.map-controls{grid-template-columns:1.2fr 1.2fr .8fr 1fr}
+@media(max-width:1100px){.map-layout.enhanced{grid-template-columns:1fr}.map-stage{min-height:680px}svg#relationSvg{height:680px}.map-controls{grid-template-columns:1fr}}
+.node circle{fill:#fff;stroke:var(--accent);stroke-width:2.5;filter:drop-shadow(0 4px 9px rgba(18,36,60,.10))}
+.node.center circle{fill:var(--accent);stroke:var(--accent)}
+.node.up circle{fill:#f6fbff}
+.node.down circle{fill:#fffaf2}
+.node text{font-size:15px;font-weight:850}
+.node.center text{font-size:16px}
+.edge{stroke-width:2.6;opacity:.88}
+.edge-label{font-size:12px;font-weight:800;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
+.edge.cause{stroke:#2f6f9f}.edge-label.cause{fill:#2f6f9f}.arrow-fill.cause{fill:#2f6f9f}
+.edge.result{stroke:#b95c38}.edge-label.result{fill:#b95c38}.arrow-fill.result{fill:#b95c38}
+.edge.component{stroke:#64748b;stroke-dasharray:7 5}.edge-label.component{fill:#64748b}.arrow-fill.component{fill:#64748b}
+.edge.test{stroke:#26866f}.edge-label.test{fill:#26866f}.arrow-fill.test{fill:#26866f}
+.edge.nursing{stroke:#c27a15}.edge-label.nursing{fill:#c27a15}.arrow-fill.nursing{fill:#c27a15}
+.edge.inhibit{stroke:#9f3d64;stroke-dasharray:4 4}.edge-label.inhibit{fill:#9f3d64}.arrow-fill.inhibit{fill:#9f3d64}
+.edge.activate{stroke:#6c62b6}.edge-label.activate{fill:#6c62b6}.arrow-fill.activate{fill:#6c62b6}
+.edge.compare{stroke:#6b7280;stroke-dasharray:2 6}.edge-label.compare{fill:#6b7280}.arrow-fill.compare{fill:#6b7280}
+.edge.related{stroke:#8a9aad}.edge-label.related{fill:#566579}.arrow-fill.related{fill:#8a9aad}
+.flow-header{font-size:16px;font-weight:900;fill:#25324b}
+.relation-legend{position:absolute;left:18px;bottom:18px;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:16px;padding:10px 12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;box-shadow:0 10px 30px rgba(22,31,52,.08);max-width:calc(100% - 36px);font-size:12px}
+.relation-legend span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.legend-line{display:inline-block;width:22px;height:0;border-top:3px solid #8a9aad}
+.legend-line.cause{border-color:#2f6f9f}.legend-line.result{border-color:#b95c38}.legend-line.component{border-color:#64748b;border-top-style:dashed}.legend-line.test{border-color:#26866f}.legend-line.nursing{border-color:#c27a15}.legend-line.inhibit{border-color:#9f3d64;border-top-style:dashed}.legend-line.activate{border-color:#6c62b6}.legend-line.compare{border-color:#6b7280;border-top-style:dotted}.legend-line.related{border-color:#8a9aad}
+.map-side{position:sticky;top:16px}
+.mini-flow{display:grid;gap:10px;margin:12px 0}
+.mini-flow div{border:1px solid var(--line);border-radius:14px;background:#f8fbff;padding:10px}
+.mini-flow strong{display:block;margin-bottom:2px;color:var(--accent)}
+.subheading{margin-top:24px;margin-bottom:10px}
+.relation-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px}
+@media(max-width:850px){.relation-summary-grid{grid-template-columns:1fr}}
+.body-layout{display:grid;grid-template-columns:430px minmax(0,1fr);gap:22px;align-items:start}
+@media(max-width:980px){.body-layout{grid-template-columns:1fr}}
+.body-silhouette-card,.body-result-card{border:1px solid var(--line);border-radius:22px;background:#fff;padding:18px;box-shadow:0 8px 30px rgba(22,31,52,.05)}
+.body-svg{width:100%;height:auto;display:block;background:radial-gradient(circle at center,#fff,#f7fbfd);border-radius:18px}
+.body-part{fill:#eaf3f7;stroke:#2e6079;stroke-width:3;cursor:pointer;transition:.15s ease}
+.body-part:hover,.body-part.active{fill:#2e6079;opacity:.92}
+.body-label{font-weight:900;font-size:14px;fill:#172033;pointer-events:auto;cursor:pointer;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
+.body-region-buttons{margin:12px 0 16px}
+.body-region-buttons .selected{background:var(--accent);color:#fff;border-color:var(--accent)}
+.mini-table table{min-width:680px}

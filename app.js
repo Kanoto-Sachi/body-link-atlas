@@ -113,6 +113,7 @@ const views = [
   ["template","JSON追加テンプレート"],
   ["list","キーワード一覧"],
   ["index","人体索引"],
+  ["body","人体シルエット"],
   ["substances","物質リンクビュー"],
   ["cross","分野横断ビュー"],
   ["map","関連マップ"],
@@ -129,7 +130,8 @@ let state = {
   filters: {},
   selected: null,
   mapCenter: null,
-  mapDepth: 1
+  mapDepth: 1,
+  mapMode: "flow"
 };
 
 const app = document.getElementById("app");
@@ -208,6 +210,7 @@ function render(){
     template: renderTemplate,
     list: renderList,
     index: renderIndex,
+    body: renderBodyAtlas,
     substances: renderSubstances,
     cross: renderCrossLinks,
     map: renderMap,
@@ -240,6 +243,7 @@ function renderTop(){
         </div>
         <p style="margin-top:18px">
           <button class="btn primary" onclick="setView('list')">キーワード一覧へ</button>
+          <button class="btn" onclick="setView('body')">人体シルエットへ</button>
           <button class="btn" onclick="setView('substances')">物質リンクへ</button>
           <button class="btn" onclick="setView('cross')">分野横断へ</button>
           <button class="btn" onclick="setView('template')">JSONテンプレートへ</button>
@@ -353,6 +357,62 @@ function renderIndex(){
   </section>`;
 }
 
+
+function relationClass(type=""){
+  if(type.includes("原因") || type.includes("病態")) return "cause";
+  if(type.includes("結果") || type.includes("症状")) return "result";
+  if(type.includes("構成")) return "component";
+  if(type.includes("検査")) return "test";
+  if(type.includes("看護")) return "nursing";
+  if(type.includes("抑制")) return "inhibit";
+  if(type.includes("活性")) return "activate";
+  if(type.includes("比較")) return "compare";
+  return "related";
+}
+function relationLabel(type=""){
+  const cls = relationClass(type);
+  return ({cause:"原因・病態", result:"結果・症状", component:"構成要素", test:"検査", nursing:"看護観察", inhibit:"抑制", activate:"活性化", compare:"比較", related:"関連"}[cls] || "関連");
+}
+function directRelations(name){
+  return state.relations.filter(r => r.source === name || r.target === name);
+}
+function relationSummary(name){
+  const rels = directRelations(name);
+  const incoming = rels.filter(r => r.target === name);
+  const outgoing = rels.filter(r => r.source === name);
+  const tests = rels.filter(r => relationClass(r.relationType) === "test" || inferTermType(getKeyword(r.source === name ? r.target : r.source) || {}) === "検査値");
+  const nursing = rels.filter(r => relationClass(r.relationType) === "nursing" || inferTermType(getKeyword(r.source === name ? r.target : r.source) || {}) === "観察");
+  const toLine = (r, dir) => {
+    const other = dir === "in" ? r.source : r.target;
+    return `${other}（${r.relationType}）`;
+  };
+  return {
+    incoming: incoming.map(r => toLine(r,"in")),
+    outgoing: outgoing.map(r => toLine(r,"out")),
+    tests: tests.map(r => r.source === name ? r.target : r.source),
+    nursing: nursing.map(r => r.source === name ? r.target : r.source)
+  };
+}
+function renderRelationSummary(name){
+  const s = relationSummary(name);
+  return `<div class="relation-summary-grid">
+    ${info("前に来やすいもの / 上流", uniq(s.incoming).slice(0,12).join("、") || "未登録")}
+    ${info("後に来やすいもの / 下流", uniq(s.outgoing).slice(0,12).join("、") || "未登録")}
+    ${info("よく一緒に見る検査", uniq(s.tests).slice(0,12).join("、") || "未登録")}
+    ${info("看護観察につながるもの", uniq(s.nursing).slice(0,12).join("、") || "未登録")}
+  </div>`;
+}
+function renderRelationLegend(){
+  const items = [
+    ["cause","原因・病態"], ["result","結果・症状"], ["component","構成要素"],
+    ["test","検査"], ["nursing","看護観察"], ["inhibit","抑制"], ["compare","比較"], ["related","関連"]
+  ];
+  return `<div class="relation-legend" aria-label="関係タイプの凡例">
+    <strong>凡例</strong>
+    ${items.map(([cls,label])=>`<span><i class="legend-line ${cls}"></i>${label}</span>`).join("")}
+  </div>`;
+}
+
 function renderCard(){
   const selected = getKeyword(state.selected) || state.keywords[0];
   if(!selected) return `<section class="panel"><p>キーワードがありません。</p></section>`;
@@ -388,6 +448,8 @@ function renderCard(){
       ${info("関連キーワード", asArray(selected.relatedKeywords).join("、"))}
       ${info("メモ・参照元", `${selected.memo || ""}\n${selected.source || ""}`)}
     </div>
+    <h3 class="subheading">前後関係</h3>
+    ${renderRelationSummary(selected.name)}
     <p style="margin-top:18px">
       <button class="btn" ${!prev?"disabled":""} onclick="setSelected('${escapeHtml(prev || selected.name)}')">前へ</button>
       <button class="btn primary" onclick="setMapCenter('${escapeHtml(selected.name)}')">関連マップで見る</button>
@@ -404,33 +466,51 @@ function renderMap(){
   const cats = getAllCategories();
   const systems = getAllSystems();
   const types = getRelationTypes();
-  const details = center ? `<div class="side-card"><h3>${escapeHtml(center.name)}</h3><p>${escapeHtml(center.shortDescription || "")}</p>
+  const summary = center ? relationSummary(center.name) : {incoming:[], outgoing:[], tests:[], nursing:[]};
+  const details = center ? `<div class="side-card map-side"><h3>${escapeHtml(center.name)}</h3><p>${escapeHtml(center.shortDescription || "")}</p>
+    <div class="mini-flow">
+      <div><strong>上流</strong><p>${escapeHtml(uniq(summary.incoming).slice(0,6).join("、") || "未登録")}</p></div>
+      <div><strong>下流</strong><p>${escapeHtml(uniq(summary.outgoing).slice(0,6).join("、") || "未登録")}</p></div>
+    </div>
     <h4>関係する細胞/物質/疾患/検査</h4><p>${escapeHtml([center.relatedCells,center.relatedSubstances,center.relatedDiseases,center.relatedTests].filter(Boolean).join(" / "))}</p>
-    <h4>看護で見ること</h4><p>${escapeHtml(center.nursingObservation || "")}</p></div>` : "";
-  return `<section class="panel">
+    <h4>看護で見ること</h4><p>${escapeHtml(center.nursingObservation || "")}</p>
+    <button class="btn primary" onclick="setSelected('${escapeHtml(center.name)}')">学習カードで開く</button></div>` : "";
+  return `<section class="panel map-panel">
     <h2>関連マップビュー</h2>
-    <p class="muted">復号済みの relations データの source / target / relationType を使って表示します。</p>
-    <div class="controls">
+    <p class="muted">矢印は source → target の向きです。フロー型では「どこから来て、どこへつながるか」を上流/下流で表示します。</p>
+    <div class="controls map-controls">
       <select onchange="state.mapCenter=this.value;render()">
         ${state.keywords.map(k => `<option ${center && center.name===k.name?"selected":""}>${escapeHtml(k.name)}</option>`).join("")}
+      </select>
+      <select onchange="state.mapMode=this.value;render()">
+        <option value="flow" ${state.mapMode==="flow"?"selected":""}>フロー型：上流 → 中心 → 下流</option>
+        <option value="radial" ${state.mapMode==="radial"?"selected":""}>放射型：周辺を俯瞰</option>
       </select>
       <select onchange="state.mapDepth=Number(this.value);render()">
         ${[1,2,3].map(d => `<option value="${d}" ${state.mapDepth===d?"selected":""}>${d}階層まで</option>`).join("")}
       </select>
       <select onchange="state.filters.mapType=this.value;render()"><option value="">関係タイプすべて</option>${types.map(t=>`<option ${state.filters.mapType===t?"selected":""}>${escapeHtml(t)}</option>`).join("")}</select>
-      <select onchange="state.filters.mapCategory=this.value;render()"><option value="">カテゴリすべて</option>${cats.map(c=>`<option ${state.filters.mapCategory===c?"selected":""}>${escapeHtml(c)}</option>`).join("")}</select>
     </div>
     <div class="controls two">
+      <select onchange="state.filters.mapCategory=this.value;render()"><option value="">カテゴリすべて</option>${cats.map(c=>`<option ${state.filters.mapCategory===c?"selected":""}>${escapeHtml(c)}</option>`).join("")}</select>
       <select onchange="state.filters.mapSystem=this.value;render()"><option value="">器官系すべて</option>${systems.map(s=>`<option ${state.filters.mapSystem===s?"selected":""}>${escapeHtml(s)}</option>`).join("")}</select>
-      <select onchange="state.filters.mapImportance=this.value;render()"><option value="">重要度すべて</option>${[5,4,3,2,1].map(i=>`<option value="${i}" ${String(state.filters.mapImportance)===String(i)?"selected":""}>${labelImportance(i)}</option>`).join("")}</select>
     </div>
-    <div class="map-layout">
-      <div class="map-stage"><svg id="relationSvg" role="img" aria-label="関連マップ"></svg></div>
+    <div class="map-layout enhanced">
+      <div class="map-stage"><svg id="relationSvg" role="img" aria-label="関連マップ"></svg>${renderRelationLegend()}</div>
       ${details}
     </div>
   </section>`;
 }
 
+function relationPassesFilters(r){
+  if(state.filters.mapType && r.relationType !== state.filters.mapType) return false;
+  const a = getKeyword(r.source), b = getKeyword(r.target);
+  const targets = [a,b].filter(Boolean);
+  if(state.filters.mapCategory && !targets.some(k => k.category === state.filters.mapCategory)) return false;
+  if(state.filters.mapSystem && !targets.some(k => asArray(k.systems || k.system).includes(state.filters.mapSystem))) return false;
+  if(state.filters.mapImportance && !targets.some(k => String(k.importance) === String(state.filters.mapImportance))) return false;
+  return true;
+}
 function buildGraph(centerName, depth){
   const nodes = new Map();
   const edges = [];
@@ -440,16 +520,13 @@ function buildGraph(centerName, depth){
     const cur = queue.shift();
     if(cur.level >= depth) continue;
     state.relations.forEach(r => {
-      if(state.filters.mapType && r.relationType !== state.filters.mapType) return;
+      if(!relationPassesFilters(r)) return;
       let next = null;
       if(r.source === cur.name) next = r.target;
       else if(r.target === cur.name) next = r.source;
       if(!next) return;
       const k = getKeyword(next);
       if(!k) return;
-      if(state.filters.mapCategory && k.category !== state.filters.mapCategory) return;
-      if(state.filters.mapSystem && !asArray(k.systems).includes(state.filters.mapSystem)) return;
-      if(state.filters.mapImportance && String(k.importance) !== String(state.filters.mapImportance)) return;
       edges.push(r);
       if(!nodes.has(next)){
         nodes.set(next, {name:next, level:cur.level+1});
@@ -457,15 +534,67 @@ function buildGraph(centerName, depth){
       }
     });
   }
-  return {nodes:[...nodes.values()], edges};
+  return {nodes:[...nodes.values()], edges:uniqEdges(edges)};
 }
-
+function uniqEdges(edges){
+  const seen = new Set();
+  return edges.filter(e => {
+    const key = `${e.source}→${e.target}→${e.relationType}`;
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 function drawMap(){
   const svg = document.getElementById("relationSvg");
   if(!svg) return;
   const center = state.mapCenter || state.keywords[0]?.name;
+  if(state.mapMode === "radial") return drawRadialMap(svg, center);
+  return drawFlowMap(svg, center);
+}
+function svgDefs(){
+  const defs = [`<defs>`];
+  ["cause","result","component","test","nursing","inhibit","activate","compare","related"].forEach(cls => {
+    defs.push(`<marker id="arrow-${cls}" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" class="arrow-fill ${cls}"></path></marker>`);
+  });
+  defs.push(`</defs>`);
+  return defs.join("");
+}
+function drawFlowMap(svg, center){
+  const direct = state.relations.filter(r => (r.source === center || r.target === center) && relationPassesFilters(r));
+  const incoming = direct.filter(r => r.target === center).slice(0,12);
+  const outgoing = direct.filter(r => r.source === center).slice(0,12);
+  const width = svg.clientWidth || 980, height = 760;
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  if(!center){ svg.innerHTML = `<text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#657084">キーワードがありません</text>`; return; }
+  const cx = width/2, cy = height/2;
+  const positions = new Map();
+  positions.set(center, {x:cx,y:cy, role:"center"});
+  const leftX = Math.max(110, width*0.18), rightX = Math.min(width-110, width*0.82);
+  const spread = Math.min(560, height-180);
+  incoming.forEach((r,i)=>{
+    const y = cy - spread/2 + (incoming.length===1 ? spread/2 : spread*i/(incoming.length-1));
+    positions.set(r.source, {x:leftX,y, role:"up"});
+  });
+  outgoing.forEach((r,i)=>{
+    const y = cy - spread/2 + (outgoing.length===1 ? spread/2 : spread*i/(outgoing.length-1));
+    positions.set(r.target, {x:rightX,y, role:"down"});
+  });
+  const headers = `<text class="flow-header" x="${leftX}" y="54" text-anchor="middle">上流：原因・前提</text><text class="flow-header" x="${cx}" y="54" text-anchor="middle">中心</text><text class="flow-header" x="${rightX}" y="54" text-anchor="middle">下流：結果・検査・看護</text>`;
+  const edgeEls = direct.map(r => {
+    const a = positions.get(r.source), b = positions.get(r.target);
+    if(!a || !b) return "";
+    const cls = relationClass(r.relationType);
+    const mx = (a.x+b.x)/2, my = (a.y+b.y)/2;
+    return `<line class="edge ${cls}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" marker-end="url(#arrow-${cls})"></line>
+      <text class="edge-label ${cls}" x="${mx}" y="${my-10}" text-anchor="middle">${escapeHtml(r.relationType)}</text>`;
+  }).join("");
+  const nodeEls = [...positions.entries()].map(([name,p]) => nodeSvg(name,p, name===center, p.role)).join("");
+  svg.innerHTML = svgDefs() + headers + edgeEls + nodeEls;
+}
+function drawRadialMap(svg, center){
   const graph = buildGraph(center, state.mapDepth);
-  const width = svg.clientWidth || 760, height = 580;
+  const width = svg.clientWidth || 980, height = 760;
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   if(graph.nodes.length <= 1){
     svg.innerHTML = `<text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#657084">関連づけが未登録です</text>`;
@@ -473,34 +602,81 @@ function drawMap(){
   }
   const cx = width/2, cy = height/2;
   const positions = new Map();
-  positions.set(center, {x:cx,y:cy});
-  const others = graph.nodes.filter(n => n.name !== center);
+  positions.set(center, {x:cx,y:cy, role:"center"});
+  const others = graph.nodes.filter(n => n.name !== center).slice(0,32);
   others.forEach((n,i) => {
     const ring = n.level || 1;
     const sameLevel = others.filter(x => x.level === n.level);
     const levelIndex = sameLevel.findIndex(x => x.name === n.name);
     const angle = (Math.PI*2 * levelIndex / Math.max(1, sameLevel.length)) - Math.PI/2;
-    const radius = Math.min(width,height) * (0.22 + (ring-1)*0.16);
-    positions.set(n.name, {x:cx + Math.cos(angle)*radius, y:cy + Math.sin(angle)*radius});
+    const radius = Math.min(width,height) * (0.26 + (ring-1)*0.18);
+    positions.set(n.name, {x:cx + Math.cos(angle)*radius, y:cy + Math.sin(angle)*radius, role:"around"});
   });
-  const visibleNames = new Set(graph.nodes.map(n=>n.name));
+  const visibleNames = new Set([...positions.keys()]);
   const edgeLines = graph.edges.filter(e=>visibleNames.has(e.source)&&visibleNames.has(e.target)).map(e => {
     const a = positions.get(e.source), b = positions.get(e.target);
     if(!a || !b) return "";
+    const cls = relationClass(e.relationType);
     const mx = (a.x+b.x)/2, my = (a.y+b.y)/2;
-    return `<line class="edge" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"></line>
-      <text class="edge-label" x="${mx}" y="${my-4}" text-anchor="middle">${escapeHtml(e.relationType)}</text>`;
+    return `<line class="edge ${cls}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" marker-end="url(#arrow-${cls})"></line>
+      <text class="edge-label ${cls}" x="${mx}" y="${my-7}" text-anchor="middle">${escapeHtml(e.relationType)}</text>`;
   }).join("");
-  const nodeEls = graph.nodes.map(n => {
-    const p = positions.get(n.name), k = getKeyword(n.name);
-    const label = n.name.length > 8 ? n.name.slice(0,8)+"…" : n.name;
-    return `<g class="node ${n.name===center?"center":""}" onclick="setMapCenter('${escapeHtml(n.name)}')">
-      <circle cx="${p.x}" cy="${p.y}" r="${n.name===center?48:40}"></circle>
-      <text x="${p.x}" y="${p.y+4}" text-anchor="middle">${escapeHtml(label)}</text>
-      ${k?.checkTag ? `<text x="${p.x}" y="${p.y+22}" text-anchor="middle" font-size="10" fill="#b4234d">要確認</text>` : ""}
-    </g>`;
-  }).join("");
-  svg.innerHTML = edgeLines + nodeEls;
+  const nodeEls = [...positions.entries()].map(([name,p]) => nodeSvg(name,p, name===center, p.role)).join("");
+  svg.innerHTML = svgDefs() + edgeLines + nodeEls;
+}
+function nodeSvg(name,p,isCenter=false,role="around"){
+  const k = getKeyword(name);
+  const r = isCenter ? 64 : 52;
+  const label = name.length > 9 ? name.slice(0,9)+"…" : name;
+  return `<g class="node ${isCenter?"center":""} ${role}" onclick="setMapCenter('${escapeHtml(name)}')">
+    <circle cx="${p.x}" cy="${p.y}" r="${r}"></circle>
+    <text x="${p.x}" y="${p.y-2}" text-anchor="middle">${escapeHtml(label)}</text>
+    ${k?.checkTag ? `<text x="${p.x}" y="${p.y+22}" text-anchor="middle" font-size="11" fill="#b4234d">要確認</text>` : ""}
+  </g>`;
+}
+
+function renderBodyAtlas(){
+  const regions = [
+    {id:"head", label:"頭部・神経", systems:["神経"], x:205,y:64},
+    {id:"chest", label:"胸部", systems:["呼吸器","循環器"], x:205,y:172},
+    {id:"abdomen", label:"腹部", systems:["消化器","腎泌尿器","内分泌"], x:205,y:292},
+    {id:"pelvis", label:"骨盤・泌尿", systems:["腎泌尿器","内分泌"], x:205,y:390},
+    {id:"arms", label:"上肢・運動器", systems:["運動器","循環器"], x:80,y:240},
+    {id:"legs", label:"下肢・運動器", systems:["運動器","循環器"], x:205,y:520},
+    {id:"whole", label:"全身・基礎", systems:["基礎レイヤー","感染免疫","検査","看護観察","修復"], x:330,y:240}
+  ];
+  const selected = state.filters.bodyRegion || "whole";
+  const region = regions.find(r=>r.id===selected) || regions[0];
+  const items = state.keywords.filter(k => region.systems.some(s => asArray(k.systems || k.system).includes(s) || k.category === s));
+  return `<section class="panel">
+    <h2>人体シルエットから探すビュー</h2>
+    <p class="muted">部位をクリックして、関係しやすい器官系・基礎概念・検査・看護観察へ入ります。3Dではなく、更新しやすいシンプルな人体入口です。</p>
+    <div class="body-layout">
+      <div class="body-silhouette-card">
+        <svg class="body-svg" viewBox="0 0 410 620" aria-label="人体シルエット">
+          <circle class="body-part ${selected==='head'?'active':''}" cx="205" cy="64" r="42" onclick="state.filters.bodyRegion='head';render()"></circle>
+          <rect class="body-part ${selected==='chest'?'active':''}" x="145" y="116" width="120" height="132" rx="48" onclick="state.filters.bodyRegion='chest';render()"></rect>
+          <rect class="body-part ${selected==='abdomen'?'active':''}" x="155" y="244" width="100" height="116" rx="34" onclick="state.filters.bodyRegion='abdomen';render()"></rect>
+          <rect class="body-part ${selected==='pelvis'?'active':''}" x="158" y="360" width="94" height="72" rx="26" onclick="state.filters.bodyRegion='pelvis';render()"></rect>
+          <rect class="body-part ${selected==='arms'?'active':''}" x="76" y="130" width="46" height="260" rx="23" onclick="state.filters.bodyRegion='arms';render()"></rect>
+          <rect class="body-part ${selected==='arms'?'active':''}" x="288" y="130" width="46" height="260" rx="23" onclick="state.filters.bodyRegion='arms';render()"></rect>
+          <rect class="body-part ${selected==='legs'?'active':''}" x="150" y="430" width="48" height="158" rx="24" onclick="state.filters.bodyRegion='legs';render()"></rect>
+          <rect class="body-part ${selected==='legs'?'active':''}" x="212" y="430" width="48" height="158" rx="24" onclick="state.filters.bodyRegion='legs';render()"></rect>
+          ${regions.map(r=>`<text class="body-label" x="${r.x}" y="${r.y}" text-anchor="middle" onclick="state.filters.bodyRegion='${r.id}';render()">${escapeHtml(r.label)}</text>`).join("")}
+        </svg>
+      </div>
+      <div class="body-result-card">
+        <h3>${escapeHtml(region.label)}</h3>
+        <p class="muted">関連器官系：${region.systems.map(s=>`<span class="chip">${escapeHtml(s)}</span>`).join(" ")}</p>
+        <div class="chips body-region-buttons">
+          ${regions.map(r=>`<button class="chip keyword-link ${selected===r.id?'selected':''}" onclick="state.filters.bodyRegion='${r.id}';render()">${escapeHtml(r.label)}</button>`).join("")}
+        </div>
+        <div class="table-wrap mini-table"><table><thead><tr><th>キーワード</th><th>種類</th><th>一言説明</th><th>操作</th></tr></thead><tbody>
+          ${items.slice(0,80).map(k=>`<tr><td><button class="keyword-link" onclick="setSelected('${escapeHtml(k.name)}')">${escapeHtml(k.name)}</button></td><td>${escapeHtml(inferTermType(k))}</td><td>${escapeHtml(k.shortDescription||"")}</td><td><button class="btn" onclick="setMapCenter('${escapeHtml(k.name)}')">マップ</button></td></tr>`).join("") || `<tr><td colspan="4">該当キーワードがありません。</td></tr>`}
+        </tbody></table></div>
+      </div>
+    </div>
+  </section>`;
 }
 
 
