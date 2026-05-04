@@ -191,3 +191,24 @@ svg#relationSvg{height:760px;min-height:760px}
 .body-region-buttons{margin:12px 0 16px}
 .body-region-buttons .selected{background:var(--accent);color:#fff;border-color:var(--accent)}
 .mini-table table{min-width:680px}
+
+/* v5 search stability patch */
+.search-hint{
+  grid-column: 1 / -1;
+  font-size: 13px;
+  color: #9a3412;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+.list-status{
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 10px 0 12px;
+}
+.btn.ghost{
+  background: #fff;
+}

@@ -137,6 +137,54 @@ let state = {
 const app = document.getElementById("app");
 const nav = document.getElementById("nav");
 
+let searchDebounceTimer = null;
+
+function isSingleKanaQuery(q){
+  const v = String(q || "").trim();
+  return v.length === 1 && /^[ぁ-んァ-ンー]$/.test(v);
+}
+function shouldApplySearch(q){
+  const v = String(q || "").trim();
+  if(!v) return true;
+  if(v.length >= 2) return true;
+  // 「血」「肺」など漢字1文字は学習検索で使うため許可する
+  if(/[一-龯々〆ヵヶ]/.test(v)) return true;
+  // 「K」「Na」のような短い検査値・物質は、完全一致がある時だけ許可する
+  if(/^[A-Za-z0-9]+$/.test(v)){
+    return state.keywords.some(k => String(k.name || "").toLowerCase() === v.toLowerCase());
+  }
+  return false;
+}
+function applyKeywordSearch(value){
+  const q = String(value || "").trim();
+  state.filters.qDraft = q;
+  state.filters.q = shouldApplySearch(q) ? q : "";
+  render();
+}
+function handleKeywordSearchInput(event){
+  const value = event.target.value;
+  state.filters.qDraft = value;
+  if(event.isComposing) return;
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => applyKeywordSearch(value), 350);
+}
+function handleKeywordSearchCompositionEnd(event){
+  const value = event.target.value;
+  state.filters.qDraft = value;
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => applyKeywordSearch(value), 250);
+}
+function clearKeywordSearch(){
+  state.filters.qDraft = "";
+  state.filters.q = "";
+  state.filters.showAllList = false;
+  render();
+}
+function showAllListRows(){
+  state.filters.showAllList = true;
+  render();
+}
+
 function escapeHtml(str=""){
   return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[s]));
 }
@@ -266,8 +314,14 @@ function renderFilters(prefix="list"){
   const systems = getAllSystems();
   const termTypes = getAllTermTypes();
   const groups = getAllSubstanceGroups();
+  const qDraft = String(state.filters.qDraft ?? state.filters.q ?? "").trim();
+  const searchHint = qDraft && !shouldApplySearch(qDraft)
+    ? `<div class="search-hint">かな1文字では自動検索しません。2文字以上、または漢字・正式名称で検索してください。</div>`
+    : "";
   return `<div class="controls filters-extended">
-    <input id="${prefix}-q" placeholder="キーワード検索" value="${escapeHtml(state.filters.q || "")}" oninput="state.filters.q=this.value;render()" />
+    <input id="${prefix}-q" placeholder="キーワード検索（かなは2文字以上推奨）" value="${escapeHtml(state.filters.qDraft ?? state.filters.q ?? "")}" oninput="handleKeywordSearchInput(event)" oncompositionend="handleKeywordSearchCompositionEnd(event)" />
+    <button class="btn" onclick="applyKeywordSearch(document.getElementById('${prefix}-q')?.value || '')">検索</button>
+    <button class="btn ghost" onclick="clearKeywordSearch()">クリア</button>
     <select onchange="state.filters.category=this.value;render()">
       <option value="">カテゴリすべて</option>
       ${cats.map(c => `<option ${state.filters.category===c?"selected":""}>${escapeHtml(c)}</option>`).join("")}
@@ -288,6 +342,7 @@ function renderFilters(prefix="list"){
       <option value="">要確認タグすべて</option>
       <option ${state.filters.checkTag==="要確認"?"selected":""}>要確認</option>
     </select>
+    ${searchHint}
   </div>`;
 }
 
@@ -306,11 +361,20 @@ function filteredKeywords(source=state.keywords){
 }
 
 function renderList(){
-  const rows = filteredKeywords();
+  const allRows = filteredKeywords();
+  const hasActiveQuery = Boolean((state.filters.q || "").trim());
+  const maxRows = state.filters.showAllList || hasActiveQuery ? 500 : 180;
+  const rows = allRows.slice(0, maxRows);
+  const qDraft = String(state.filters.qDraft ?? state.filters.q ?? "").trim();
+  const blocked = qDraft && !shouldApplySearch(qDraft);
   return `<section class="panel">
     <h2>キーワード一覧ビュー</h2>
-    <p class="muted">JSONに登録されているキーワードを表形式で確認します。</p>
+    <p class="muted">JSONに登録されているキーワードを表形式で確認します。検索は負荷軽減のため少し待ってから実行されます。</p>
     ${renderFilters("list")}
+    <div class="list-status">
+      ${blocked ? `<span class="chip check">かな1文字検索は停止中</span>` : `<span class="chip">表示 ${rows.length} / ${allRows.length}件</span>`}
+      ${!hasActiveQuery && allRows.length > rows.length ? `<button class="btn" onclick="showAllListRows()">全${allRows.length}件を表示</button>` : ""}
+    </div>
     <div class="table-wrap"><table>
       <thead><tr>
         <th>キーワード</th><th>読み方</th><th>カテゴリ</th><th>器官系</th><th>理解度</th><th>重要度</th><th>要確認</th><th>看護で見ること</th>
